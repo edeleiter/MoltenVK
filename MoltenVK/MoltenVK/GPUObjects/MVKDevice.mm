@@ -4644,6 +4644,22 @@ void MVKDevice::encodeGPUAddressableBuffers(MVKUseResourceHelper& resources, MVK
 	}
 }
 
+id<MTLBuffer> MVKDevice::getMTLBufferForDeviceAddress(VkDeviceAddress addr, NSUInteger* pOffset) {
+	lock_guard<mutex> lock(_rezLock);
+	// Linear scan of the (small) GPU-addressable buffer set — the same set encodeGPUAddressableBuffers uses.
+	// A buffer's device address range is [gpuAddress .. gpuAddress + byteCount); the MTLBuffer offset for a
+	// covered address folds the buffer's own intra-heap offset back in.
+	for (auto& buff : _gpuAddressableBuffers) {
+		uint64_t base = buff->getMTLBufferGPUAddress();
+		if (addr >= base && addr < base + buff->getByteCount()) {
+			if (pOffset) { *pOffset = buff->getMTLBufferOffset() + (NSUInteger)(addr - base); }
+			return buff->getMTLBuffer();
+		}
+	}
+	if (pOffset) { *pOffset = 0; }
+	return nil;
+}
+
 MVKImage* MVKDevice::addImage(MVKImage* mvkImg) {
 	if ( !mvkImg ) { return mvkImg; }
 

@@ -876,6 +876,15 @@ public:
 	/** Tell the GPU to be ready to use any of the GPU-addressable buffers. */
 	void encodeGPUAddressableBuffers(MVKUseResourceHelper& resources, MVKResourceUsageStages stage);
 
+	/**
+	 * Resolves a buffer device address (as handed out by VK_KHR_buffer_device_address) back to the
+	 * MTLBuffer that contains it, setting *pOffset to the byte offset of the address within that MTLBuffer.
+	 * The reverse of getMTLBufferGPUAddress(); used by acceleration-structure builds, which receive
+	 * vertex/instance data by device address but need an id<MTLBuffer>+offset. Returns nil if no
+	 * GPU-addressable buffer covers the address.
+	 */
+	id<MTLBuffer> getMTLBufferForDeviceAddress(VkDeviceAddress addr, NSUInteger* pOffset);
+
 	/** Adds the specified host semaphore to be woken upon device loss. */
 	void addSemaphore(MVKSemaphoreImpl* sem4);
 

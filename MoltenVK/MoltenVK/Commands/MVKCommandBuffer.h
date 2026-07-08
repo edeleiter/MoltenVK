@@ -375,6 +375,10 @@ public:
 	 */
 	id<MTLBlitCommandEncoder> getMTLBlitEncoder(MVKCommandUse cmdUse);
 
+	/** Returns the MTLAccelerationStructureCommandEncoder, creating it (and ending any active encoder) if
+	 *  needed. Used by acceleration-structure build commands (the VK_KHR_ray_query fork). */
+	id<MTLAccelerationStructureCommandEncoder> getMTLAccelerationStructureEncoder(MVKCommandUse cmdUse);
+
 	/**
 	 * Returns the current Metal encoder, which may be any of the Metal render,
 	 * compute, or Blit encoders, or nil if no encoding is currently occurring.
@@ -544,6 +548,7 @@ protected:
 	MVKSmallVector<MVKImageView*, kMVKDefaultAttachmentCount> _attachments;
 	id<MTLComputeCommandEncoder> _mtlComputeEncoder;
 	id<MTLBlitCommandEncoder> _mtlBlitEncoder;
+	id<MTLAccelerationStructureCommandEncoder> _mtlAccelStructEncoder = nil;
 	id<MTLFence> _stageCountersMTLFence;
 	MVKPrefillMetalCommandBuffersStyle _prefillStyle;
 	VkSubpassContents _subpassContents;

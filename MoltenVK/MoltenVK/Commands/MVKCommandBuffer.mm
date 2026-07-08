@@ -1068,6 +1068,8 @@ void MVKCommandEncoder::endCurrentMetalEncoding() {
 	endMetalEncoding(_mtlBlitEncoder);
     _mtlBlitEncoderUse = kMVKCommandUseNone;
 
+	endMetalEncoding(_mtlAccelStructEncoder);   // no-op if never opened (nil endEncoding)
+
 	encodeTimestampStageCounterSamples();
 }
 
@@ -1134,6 +1136,16 @@ id<MTLBlitCommandEncoder> MVKCommandEncoder::getMTLBlitEncoder(MVKCommandUse cmd
 		encodeBarrierWaits(cmdUse);
 	}
 	return _mtlBlitEncoder;
+}
+
+id<MTLAccelerationStructureCommandEncoder> MVKCommandEncoder::getMTLAccelerationStructureEncoder(MVKCommandUse cmdUse) {
+	if ( !_mtlAccelStructEncoder ) {
+		endCurrentMetalEncoding();
+		_mtlAccelStructEncoder = [_mtlCmdBuffer accelerationStructureCommandEncoder];
+		retainIfImmediatelyEncoding(_mtlAccelStructEncoder);
+		encodeBarrierWaits(cmdUse);
+	}
+	return _mtlAccelStructEncoder;
 }
 
 id<MTLCommandEncoder> MVKCommandEncoder::getMTLEncoder(){
