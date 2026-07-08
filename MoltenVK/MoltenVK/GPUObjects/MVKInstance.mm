@@ -821,6 +821,11 @@ void MVKInstance::initProcAddrs() {
 }
 
 void MVKInstance::logVersions() {
+	// [VulkanEd fork] TEMP M0 marker — proves the engine loaded THIS repo's build-moltenvk.sh binary
+	// (not brew's stock MoltenVK) via the staged MoltenVK_icd.json. Remove once the RT extensions land
+	// and give their own unambiguous signal. See docs/plans/2026-07-07-moltenvk-rayquery-mac-rt.md (M0).
+	MVKLogInfo("[VulkanEd fork] libMoltenVK from this repo — M0 consume proof (VK_KHR_ray_query fork).");
+
 	static_assert(string_view(MVK_STRINGIFY(MVK_FRAMEWORK_VERSION)) == MVK_VERSION_STRING, "Xcode build setting CURRENT_PROJECT_VERSION must be identical to the MoltenVK version (MVK_VERSION_STRING).");
 
 	MVKExtensionList allExtns(this, true);
