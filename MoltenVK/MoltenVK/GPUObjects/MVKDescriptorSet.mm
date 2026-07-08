@@ -807,8 +807,12 @@ static MVKDescriptorUpdateSourceType getDescriptorUpdateSourceType(VkDescriptorT
 		case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
 			return MVKDescriptorUpdateSourceType::InlineUniform;
 
-		case VK_DESCRIPTOR_TYPE_PARTITIONED_ACCELERATION_STRUCTURE_NV:
 		case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+			// M1: accept + IGNORE the engine's TLAS binding write (no real Metal AS exists yet). Returning
+			// Unsupported yields a null write source, so mvkUpdateDescriptorSets skips this write, rather than
+			// falling through to the assert(0) below. M2 replaces this with a real MTLAccelerationStructure bind.
+			return MVKDescriptorUpdateSourceType::Unsupported;
+		case VK_DESCRIPTOR_TYPE_PARTITIONED_ACCELERATION_STRUCTURE_NV:
 		case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
 		case VK_DESCRIPTOR_TYPE_SAMPLE_WEIGHT_IMAGE_QCOM:
 		case VK_DESCRIPTOR_TYPE_BLOCK_MATCH_IMAGE_QCOM:

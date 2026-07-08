@@ -21,6 +21,7 @@
 #include "MVKQueue.h"
 #include "MVKSurface.h"
 #include "MVKBuffer.h"
+#include "MVKAccelerationStructure.h"
 #include "MVKImage.h"
 #include "MVKSwapchain.h"
 #include "MVKQueryPool.h"
@@ -98,6 +99,7 @@ MVKMTLDeviceCapabilities::MVKMTLDeviceCapabilities(id<MTLDevice> mtlDev) {
 #if MVK_XCODE_26 && !MVK_OS_SIMULATOR
 	supportsMetal4 = supportsGPUFam(Metal4, mtlDev);
 #endif
+	supportsRaytracing = [mtlDev supportsRaytracing];
 	supportsApple1 = supportsGPUFam(Apple1, mtlDev);
 	supportsApple2 = supportsGPUFam(Apple2, mtlDev);
 	supportsApple3 = supportsGPUFam(Apple3, mtlDev);
@@ -606,6 +608,21 @@ void MVKPhysicalDevice::getFeatures(VkPhysicalDeviceFeatures2* features) {
 				portabilityFeatures->tessellationPointMode = false;
 				portabilityFeatures->triangleFans = true;
 				portabilityFeatures->vertexAttributeAccessBeyondStride = true;	// Costs additional buffers. Should make configuration switch.
+				break;
+			}
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR: {
+				auto* accelStructFeatures = (VkPhysicalDeviceAccelerationStructureFeaturesKHR*)next;
+				accelStructFeatures->accelerationStructure = true;
+				// Advertised as unsupported at M1 (and not needed by the engine's host-side-rebuilt TLAS path):
+				accelStructFeatures->accelerationStructureCaptureReplay = false;
+				accelStructFeatures->accelerationStructureIndirectBuild = false;
+				accelStructFeatures->accelerationStructureHostCommands = false;
+				accelStructFeatures->descriptorBindingAccelerationStructureUpdateAfterBind = false;
+				break;
+			}
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR: {
+				auto* rayQueryFeatures = (VkPhysicalDeviceRayQueryFeaturesKHR*)next;
+				rayQueryFeatures->rayQuery = true;
 				break;
 			}
 			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR: {
@@ -1275,6 +1292,23 @@ void MVKPhysicalDevice::getProperties(VkPhysicalDeviceProperties2* properties) {
 			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT: {
 				auto* extMemHostProps = (VkPhysicalDeviceExternalMemoryHostPropertiesEXT*)next;
 				extMemHostProps->minImportedHostPointerAlignment = _metalFeatures.hostMemoryPageSize;
+				break;
+			}
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR: {
+				auto* accelStructProps = (VkPhysicalDeviceAccelerationStructurePropertiesKHR*)next;
+				// The engine reads only minAccelerationStructureScratchOffsetAlignment (RtAccelCache scratch alloc):
+				// 256 is safe — the engine over-allocates scratch, so too-large never corrupts; too-small would.
+				// The count MAXIMA must be generous, not zero: the validation layer checks the engine's per-frame
+				// BLAS/TLAS build counts + AS descriptor bindings against them (a zero maximum trips VUID 03793/
+				// 03795/03801/03571-4). These mirror typical desktop-HW-RT limits.
+				accelStructProps->maxGeometryCount                                          = (1ull << 24) - 1;   // 16,777,215
+				accelStructProps->maxInstanceCount                                          = (1ull << 24) - 1;
+				accelStructProps->maxPrimitiveCount                                         = (1ull << 29) - 1;   // 536,870,911
+				accelStructProps->maxPerStageDescriptorAccelerationStructures               = 500000;
+				accelStructProps->maxPerStageDescriptorUpdateAfterBindAccelerationStructures = 500000;
+				accelStructProps->maxDescriptorSetAccelerationStructures                    = 500000;
+				accelStructProps->maxDescriptorSetUpdateAfterBindAccelerationStructures     = 500000;
+				accelStructProps->minAccelerationStructureScratchOffsetAlignment            = 256;
 				break;
 			}
 			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_KHR: {
@@ -3550,6 +3584,14 @@ void MVKPhysicalDevice::initExtensions() {
 		pWritableExtns->vk_EXT_buffer_device_address.enabled = false;
 	}
 
+	// VK_KHR_ray_query + VK_KHR_acceleration_structure need Metal hardware ray tracing (M5 Max qualifies) and
+	// MSL 3.0+ (SPIRV-Cross emits inline ray-query as metal::raytracing::intersection_query). Keep them dark
+	// on any GPU/OS below that floor so the feature never lights up where it can't run.
+	if ( !_gpuCapabilities.supportsRaytracing || _metalFeatures.mslVersion < 030000 ) {
+		pWritableExtns->vk_KHR_acceleration_structure.enabled = false;
+		pWritableExtns->vk_KHR_ray_query.enabled = false;
+	}
+
 	if (!_gpuCapabilities.isAppleGPU) {
 		pWritableExtns->vk_AMD_shader_image_load_store_lod.enabled = false;
 		pWritableExtns->vk_IMG_format_pvrtc.enabled = false;
@@ -4262,6 +4304,16 @@ MVKDeferredOperation* MVKDevice::createDeferredOperation(const VkAllocationCallb
 void MVKDevice::destroyDeferredOperation(MVKDeferredOperation* mvkDeferredOperation,
                                          const VkAllocationCallbacks* pAllocator) {
     if(mvkDeferredOperation) { mvkDeferredOperation->destroy(); }
+}
+
+MVKAccelerationStructure* MVKDevice::createAccelerationStructure(const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
+                                                                const VkAllocationCallbacks* pAllocator) {
+    return new MVKAccelerationStructure(this, pCreateInfo);
+}
+
+void MVKDevice::destroyAccelerationStructure(MVKAccelerationStructure* mvkAccelStruct,
+                                             const VkAllocationCallbacks* pAllocator) {
+    if (mvkAccelStruct) { mvkAccelStruct->destroy(); }
 }
 
 MVKEvent* MVKDevice::createEvent(const VkEventCreateInfo* pCreateInfo,

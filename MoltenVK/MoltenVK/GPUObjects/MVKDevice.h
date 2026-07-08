@@ -53,6 +53,7 @@ class MVKFence;
 class MVKSemaphore;
 class MVKTimelineSemaphore;
 class MVKDeferredOperation;
+class MVKAccelerationStructure;
 class MVKEvent;
 class MVKQueryPool;
 class MVKShaderModule;
@@ -116,6 +117,7 @@ typedef struct MVKMTLDeviceCapabilities {
 	bool supportsMac2;
 	bool supportsMetal3;
 	bool supportsMetal4;
+	bool supportsRaytracing;
 
 	bool isAppleGPU;
 	bool supportsBCTextureCompression;
@@ -765,6 +767,11 @@ public:
     MVKDeferredOperation* createDeferredOperation(const VkAllocationCallbacks* pAllocator);
     void destroyDeferredOperation(MVKDeferredOperation* mvkDeferredOperation,
                                   const VkAllocationCallbacks* pAllocator);
+
+    MVKAccelerationStructure* createAccelerationStructure(const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
+                                                          const VkAllocationCallbacks* pAllocator);
+    void destroyAccelerationStructure(MVKAccelerationStructure* mvkAccelStruct,
+                                      const VkAllocationCallbacks* pAllocator);
 
 	MVKEvent* createEvent(const VkEventCreateInfo* pCreateInfo,
 						  const VkAllocationCallbacks* pAllocator);

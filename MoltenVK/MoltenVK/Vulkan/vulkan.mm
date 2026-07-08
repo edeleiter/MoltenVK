@@ -28,6 +28,7 @@
 #include "MVKCmdQueries.h"
 #include "MVKImage.h"
 #include "MVKBuffer.h"
+#include "MVKAccelerationStructure.h"
 #include "MVKDeviceMemory.h"
 #include "MVKDescriptorSet.h"
 #include "MVKRenderPass.h"
@@ -3164,6 +3165,79 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdSetRenderingInputAttachmentIndices(
 
 MVK_PUBLIC_VULKAN_CORE_ALIAS(vkBindBufferMemory2, KHR);
 MVK_PUBLIC_VULKAN_CORE_ALIAS(vkBindImageMemory2, KHR);
+
+
+#pragma mark -
+#pragma mark VK_KHR_acceleration_structure extension
+
+// M1: the extension is ADVERTISED but acceleration structures are not yet backed by Metal. These entry points
+// are deliberately BENIGN (NOT the assert(false) MVK_PUBLIC_VULKAN_STUB macros): create returns a unique
+// non-null handle, BuildSizes reports non-zero 256-aligned sizes, GetDeviceAddress a non-zero address, and the
+// build/copy commands are no-ops. The engine therefore selects the hardware RayQuery backend, allocates its AS
+// scratch/store, records a build that does nothing, and the shader traverses a garbage TLAS — the intended
+// first-frame VK_ERROR_DEVICE_LOST. M2 replaces these with real MTLAccelerationStructure plumbing.
+
+MVK_PUBLIC_VULKAN_SYMBOL VkResult vkCreateAccelerationStructureKHR(
+    VkDevice device,
+    const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator,
+    VkAccelerationStructureKHR* pAccelerationStructure) {
+
+    // A real MVKAccelerationStructure (device-owned); the handle IS the object pointer. M2a builds the
+    // backing MTLAccelerationStructure into it; foundation stage just allocates the wrapper.
+    MVKDevice* mvkDev = MVKDevice::getMVKDevice(device);
+    MVKAccelerationStructure* mvkAS = mvkDev->createAccelerationStructure(pCreateInfo, pAllocator);
+    *pAccelerationStructure = (VkAccelerationStructureKHR)mvkAS;
+    return VK_SUCCESS;
+}
+
+MVK_PUBLIC_VULKAN_SYMBOL void vkDestroyAccelerationStructureKHR(
+    VkDevice device,
+    VkAccelerationStructureKHR accelerationStructure,
+    const VkAllocationCallbacks* pAllocator) {
+
+    MVKDevice* mvkDev = MVKDevice::getMVKDevice(device);
+    mvkDev->destroyAccelerationStructure((MVKAccelerationStructure*)accelerationStructure, pAllocator);   // tolerates null
+}
+
+MVK_PUBLIC_VULKAN_SYMBOL void vkGetAccelerationStructureBuildSizesKHR(
+    VkDevice device,
+    VkAccelerationStructureBuildTypeKHR buildType,
+    const VkAccelerationStructureBuildGeometryInfoKHR* pBuildInfo,
+    const uint32_t* pMaxPrimitiveCounts,
+    VkAccelerationStructureBuildSizesInfoKHR* pSizeInfo) {
+
+    // Non-zero, 256-aligned so the engine's VMA scratch/store allocations succeed.
+    if (pSizeInfo) {
+        pSizeInfo->accelerationStructureSize = 65536;
+        pSizeInfo->updateScratchSize        = 65536;
+        pSizeInfo->buildScratchSize          = 65536;
+    }
+}
+
+MVK_PUBLIC_VULKAN_SYMBOL VkDeviceAddress vkGetAccelerationStructureDeviceAddressKHR(
+    VkDevice device,
+    const VkAccelerationStructureDeviceAddressInfoKHR* pInfo) {
+
+    // Any non-zero address; the no-op TLAS build never dereferences it. Use the handle so it's unique per AS.
+    return pInfo ? (VkDeviceAddress)pInfo->accelerationStructure : (VkDeviceAddress)0x1000;
+}
+
+MVK_PUBLIC_VULKAN_SYMBOL void vkCmdBuildAccelerationStructuresKHR(
+    VkCommandBuffer commandBuffer,
+    uint32_t infoCount,
+    const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
+    const VkAccelerationStructureBuildRangeInfoKHR* const* ppBuildRangeInfos) {
+
+    // No-op: nothing is built in Metal → the shader traverses a garbage TLAS → the intended device-lost.
+}
+
+MVK_PUBLIC_VULKAN_SYMBOL void vkCmdCopyAccelerationStructureKHR(
+    VkCommandBuffer commandBuffer,
+    const VkCopyAccelerationStructureInfoKHR* pInfo) {
+
+    // No-op (not on the first-frame critical path).
+}
 
 
 #pragma mark -
