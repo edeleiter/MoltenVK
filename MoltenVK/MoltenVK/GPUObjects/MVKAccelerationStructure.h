@@ -60,6 +60,18 @@ public:
 
 	void destroy() override;
 
+	/**
+	 * Builds the Metal acceleration-structure descriptor for a Vulkan build info. BLAS (BOTTOM_LEVEL) →
+	 * an MTLPrimitiveAccelerationStructureDescriptor of triangle geometries (R32G32B32 positions, vertex
+	 * data resolved from the buffer device address); TLAS (TOP_LEVEL) → an
+	 * MTLInstanceAccelerationStructureDescriptor sized by instance count (its instances are materialized
+	 * at build time). pPrimitiveCounts is per-geometry (BuildSizes' maxPrimitiveCounts, or the build ranges).
+	 * Shared by vkGetAccelerationStructureBuildSizesKHR and the build command.
+	 */
+	static MTLAccelerationStructureDescriptor* getMTLDescriptor(MVKDevice* device,
+															   const VkAccelerationStructureBuildGeometryInfoKHR* pBuildInfo,
+															   const uint32_t* pPrimitiveCounts);
+
 
 #pragma mark Construction
 

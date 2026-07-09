@@ -1630,4 +1630,12 @@ void MVKPixelFormats::setFormatProperties(MVKVkFormatDesc& vkDesc, const MVKMTLD
 		enableFormatFeatures(Atomic, Buf, mtlPixFmtCaps, vkProps.bufferFeatures);
 		enableFormatFeatures(Vertex, Buf, getMTLVertexFormatDesc(vkDesc.mtlVertexFormat).mtlFmtCaps, vkProps.bufferFeatures);
 	}
+
+	// VK_KHR_acceleration_structure (VulkanEd ray-query fork): advertise R32G32B32_SFLOAT as a valid AS-build
+	// vertex format on Metal 3. Done as a targeted per-format OR *after* the enableFormatFeatures macros — those
+	// pair each Vulkan feature flag with a Metal pixel-format capability, so adding this bit to their enum breaks
+	// them (it has no Metal-capability counterpart). This clears VUID-...-vertexFormat-03797.
+	if (gpuCaps.supportsMetal3 && vkDesc.vkFormat == VK_FORMAT_R32G32B32_SFLOAT) {
+		mvkEnableFlags(vkProps.bufferFeatures, VK_FORMAT_FEATURE_2_ACCELERATION_STRUCTURE_VERTEX_BUFFER_BIT_KHR);
+	}
 }

@@ -13,7 +13,10 @@ string(STRIP "${SPIRV_CROSS_COMMIT_HASH}" SPIRV_CROSS_COMMIT_HASH)
 include(CPM)
 CPMAddPackage(
   NAME SPIRV-Cross
-  GITHUB_REPOSITORY KhronosGroup/SPIRV-Cross
+  # VulkanEd fork: adds SPIRType::AccelerationStructure to CompilerMSL's padded-argument-buffer index switch
+  # (upstream throws "Unexpected argument buffer resource base type" — its inline ray-query + padded arg-buffer
+  # path was never exercised). Branched off the pinned Khronos commit; the sole delta is that one case.
+  GITHUB_REPOSITORY edeleiter/SPIRV-Cross
   GIT_TAG ${SPIRV_CROSS_COMMIT_HASH}
   SYSTEM TRUE
   OPTIONS

@@ -25,6 +25,7 @@
 #include "MVKCmdPipeline.h"
 #include "MVKCmdRendering.h"
 #include "MVKCmdDispatch.h"
+#include "MVKCmdAccelerationStructure.h"
 #include "MVKCmdDraw.h"
 #include "MVKCmdTransfer.h"
 #include "MVKCmdQueries.h"

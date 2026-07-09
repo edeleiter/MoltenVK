@@ -3183,10 +3183,15 @@ MVK_PUBLIC_VULKAN_SYMBOL VkResult vkCreateAccelerationStructureKHR(
     const VkAllocationCallbacks* pAllocator,
     VkAccelerationStructureKHR* pAccelerationStructure) {
 
-    // A real MVKAccelerationStructure (device-owned); the handle IS the object pointer. M2a builds the
-    // backing MTLAccelerationStructure into it; foundation stage just allocates the wrapper.
+    // A real MVKAccelerationStructure (device-owned; the handle IS the object pointer), backed by an
+    // MTLAccelerationStructure of the requested size (which the engine took from BuildSizes = Metal's real
+    // size). Metal self-allocates the store — the engine's backing VkBuffer is intentionally ignored.
     MVKDevice* mvkDev = MVKDevice::getMVKDevice(device);
     MVKAccelerationStructure* mvkAS = mvkDev->createAccelerationStructure(pCreateInfo, pAllocator);
+    id<MTLAccelerationStructure> mtlAS = [mvkDev->getPhysicalDevice()->getMTLDevice() newAccelerationStructureWithSize: pCreateInfo->size];
+    mvkAS->setMTLAccelerationStructure(mtlAS);   // retains
+    mvkDev->makeResident(mtlAS);                 // residency set (M5): the ray-query dispatch reads the AS directly
+    [mtlAS release];                             // balance the +1 from newAccelerationStructureWithSize:
     *pAccelerationStructure = (VkAccelerationStructureKHR)mvkAS;
     return VK_SUCCESS;
 }
@@ -3207,19 +3212,23 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkGetAccelerationStructureBuildSizesKHR(
     const uint32_t* pMaxPrimitiveCounts,
     VkAccelerationStructureBuildSizesInfoKHR* pSizeInfo) {
 
-    // Non-zero, 256-aligned so the engine's VMA scratch/store allocations succeed.
-    if (pSizeInfo) {
-        pSizeInfo->accelerationStructureSize = 65536;
-        pSizeInfo->updateScratchSize        = 65536;
-        pSizeInfo->buildScratchSize          = 65536;
-    }
+    if ( !pSizeInfo ) { return; }
+    // Query Metal for the real sizes of the AS + build/refit scratch, from the descriptor the build will use.
+    MVKDevice* mvkDev = MVKDevice::getMVKDevice(device);
+    MTLAccelerationStructureDescriptor* desc = MVKAccelerationStructure::getMTLDescriptor(mvkDev, pBuildInfo, pMaxPrimitiveCounts);
+    MTLAccelerationStructureSizes sizes = [mvkDev->getPhysicalDevice()->getMTLDevice() accelerationStructureSizesWithDescriptor: desc];
+    pSizeInfo->accelerationStructureSize = sizes.accelerationStructureSize;
+    pSizeInfo->buildScratchSize          = sizes.buildScratchBufferSize;
+    pSizeInfo->updateScratchSize         = sizes.refitScratchBufferSize;
 }
 
 MVK_PUBLIC_VULKAN_SYMBOL VkDeviceAddress vkGetAccelerationStructureDeviceAddressKHR(
     VkDevice device,
     const VkAccelerationStructureDeviceAddressInfoKHR* pInfo) {
 
-    // Any non-zero address; the no-op TLAS build never dereferences it. Use the handle so it's unique per AS.
+    // Pointer-as-token: return the MVKAccelerationStructure handle itself as the "address". The engine stores
+    // this verbatim into VkAccelerationStructureInstanceKHR.accelerationStructureReference; the TLAS build
+    // (MVKCmdBuildAccelerationStructures::encodeTLAS) casts it straight back to resolve the referenced BLAS.
     return pInfo ? (VkDeviceAddress)pInfo->accelerationStructure : (VkDeviceAddress)0x1000;
 }
 
@@ -3229,7 +3238,9 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdBuildAccelerationStructuresKHR(
     const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
     const VkAccelerationStructureBuildRangeInfoKHR* const* ppBuildRangeInfos) {
 
-    // No-op: nothing is built in Metal → the shader traverses a garbage TLAS → the intended device-lost.
+    // BLAS builds are real (MTLPrimitiveAccelerationStructure); TLAS builds are captured but skipped at encode
+    // (the host-side TLAS + address↔handle shim are a later milestone).
+    MVKAddCmd(BuildAccelerationStructures, commandBuffer, infoCount, pInfos, ppBuildRangeInfos);
 }
 
 MVK_PUBLIC_VULKAN_SYMBOL void vkCmdCopyAccelerationStructureKHR(

@@ -39,3 +39,38 @@ void MVKAccelerationStructure::detachMetal() {
 	_mtlAccelStruct = nil;
 	_referencedBLAS.clear();
 }
+
+MTLAccelerationStructureDescriptor* MVKAccelerationStructure::getMTLDescriptor(
+	MVKDevice* device,
+	const VkAccelerationStructureBuildGeometryInfoKHR* pBuildInfo,
+	const uint32_t* pPrimitiveCounts) {
+
+	if (pBuildInfo->type == VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR) {
+		// TLAS: sized by instance count. The actual instance array is materialized at build time (the shim).
+		auto* instDesc = [MTLInstanceAccelerationStructureDescriptor descriptor];
+		instDesc.instanceCount = pPrimitiveCounts ? pPrimitiveCounts[0] : 0;
+		return instDesc;
+	}
+
+	// BLAS: one Metal triangle geometry per Vulkan triangle geometry (the engine uses positions-only soup).
+	auto* geoms = [NSMutableArray<MTLAccelerationStructureGeometryDescriptor*> array];
+	for (uint32_t i = 0; i < pBuildInfo->geometryCount; i++) {
+		const VkAccelerationStructureGeometryKHR& g = pBuildInfo->pGeometries ? pBuildInfo->pGeometries[i]
+																			  : *pBuildInfo->ppGeometries[i];
+		if (g.geometryType != VK_GEOMETRY_TYPE_TRIANGLES_KHR) { continue; }
+		const VkAccelerationStructureGeometryTrianglesDataKHR& tri = g.geometry.triangles;
+
+		auto* triDesc = [MTLAccelerationStructureTriangleGeometryDescriptor descriptor];
+		triDesc.triangleCount = pPrimitiveCounts ? pPrimitiveCounts[i] : 0;
+		triDesc.vertexFormat  = MTLAttributeFormatFloat3;   // VK_FORMAT_R32G32B32_SFLOAT
+		triDesc.vertexStride  = tri.vertexStride;
+		NSUInteger vbOffset = 0;
+		triDesc.vertexBuffer = device->getMTLBufferForDeviceAddress(tri.vertexData.deviceAddress, &vbOffset);
+		triDesc.vertexBufferOffset = vbOffset;
+		triDesc.opaque = mvkIsAnyFlagEnabled(g.flags, VK_GEOMETRY_OPAQUE_BIT_KHR);
+		[geoms addObject: triDesc];
+	}
+	auto* primDesc = [MTLPrimitiveAccelerationStructureDescriptor descriptor];
+	primDesc.geometryDescriptors = geoms;
+	return primDesc;
+}

@@ -101,6 +101,7 @@ typedef enum : uint8_t {
     kMVKCommandUseClearDepthStencilImage,       /**< vkCmdClearDepthStencilImage. */
     kMVKCommandUseResetQueryPool,               /**< vkCmdResetQueryPool. */
     kMVKCommandUseDispatch,                     /**< vkCmdDispatch. */
+    kMVKCommandUseBuildAccelerationStructure,   /**< vkCmdBuildAccelerationStructuresKHR. */
     kMVKCommandUseTessellationVertexTessCtl,    /**< vkCmdDraw* - vertex and tessellation control stages. */
 	kMVKCommandUseDrawIndirectConvertBuffers,   /**< vkCmdDrawIndirect* convert indirect buffers. */
 	kMVKCommandUseCopyQueryPoolResults,         /**< vkCmdCopyQueryPoolResults. */

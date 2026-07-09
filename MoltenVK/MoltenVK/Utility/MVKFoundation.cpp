@@ -53,6 +53,7 @@ const char* mvkVkCommandName(MVKCommandUse cmdUse) {
 		case kMVKCommandUseClearDepthStencilImage:       return "vkCmdClearDepthStencilImage";
 		case kMVKCommandUseResetQueryPool:               return "vkCmdResetQueryPool";
 		case kMVKCommandUseDispatch:                     return "vkCmdDispatch";
+		case kMVKCommandUseBuildAccelerationStructure:   return "vkCmdBuildAccelerationStructuresKHR";
 		case kMVKCommandUseTessellationVertexTessCtl:    return "vkCmdDraw (vertex and tess control stages)";
 		case kMVKCommandUseDrawIndirectConvertBuffers:   return "vkCmdDrawIndirect (convert indirect buffers)";
 		case kMVKCommandUseCopyQueryPoolResults:         return "vkCmdCopyQueryPoolResults";

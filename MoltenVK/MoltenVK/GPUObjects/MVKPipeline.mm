@@ -198,7 +198,13 @@ void MVKPipelineLayout::populateShaderConversionConfig(SPIRVToMSLConversionConfi
 
 				MVKSampler*const* immSamp = layout->getImmutableSampler(desc);
 				MVKDescriptorGPULayout gpuLayout = argbuf ? desc.gpuLayout : getBindingLayout(desc);
-				addResourceBindingToShaderConfig(shaderConfig, binding.stages[stage], stage, dslIdx, desc.binding, desc.descriptorCount, gpuLayout, immSamp ? *immSamp : nullptr);
+				if (desc.descriptorType == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR) {
+					// AS reuses the Texture GPU layout (one gpuResourceID slot), but SPIRV-Cross must emit it as an
+					// acceleration_structure, not a texture — so bind it with the AccelerationStructure basetype.
+					shaderConfig.resourceBindings.push_back(makeResourceBinding(binding.stages[stage], stage, dslIdx, desc.binding, desc.descriptorCount, SPIRV_CROSS_NAMESPACE::SPIRType::AccelerationStructure, nullptr));
+				} else {
+					addResourceBindingToShaderConfig(shaderConfig, binding.stages[stage], stage, dslIdx, desc.binding, desc.descriptorCount, gpuLayout, immSamp ? *immSamp : nullptr);
+				}
 				if (desc.perDescriptorResourceCount.dynamicOffset != 0 && used) {
 					shaderConfig.dynamicBufferDescriptors.push_back(makeDescriptorBinding(stage, dslIdx, desc.binding, binding.stages[stage].dynamicOffsetBufferIndex));
 				}
