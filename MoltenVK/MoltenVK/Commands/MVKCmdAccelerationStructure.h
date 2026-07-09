@@ -31,10 +31,10 @@ class MVKDevice;
 #pragma mark MVKCmdBuildAccelerationStructures
 
 /**
- * Vulkan command to build acceleration structures (VK_KHR_ray_query fork). Defers to encode(), where each
- * BOTTOM_LEVEL (BLAS) build is encoded as an MTLPrimitiveAccelerationStructure build on an
- * MTLAccelerationStructureCommandEncoder. TOP_LEVEL (TLAS) builds are captured but skipped at encode — the
- * host-side TLAS + address↔handle shim are a later milestone.
+ * Vulkan command to build acceleration structures (VK_KHR_ray_query fork). Defers to encode(): BOTTOM_LEVEL
+ * (BLAS) builds encode an MTLPrimitiveAccelerationStructure, and TOP_LEVEL (TLAS) builds host-read the instance
+ * buffer, resolve each accelerationStructureReference to its BLAS (pointer-as-token), and encode an
+ * MTLInstanceAccelerationStructure — both on an MTLAccelerationStructureCommandEncoder.
  *
  * The class name must be exactly MVKCmdBuildAccelerationStructures (token-pasted by MVKCommandTypePools.def
  * into the pool member + getTypePool body), and must stay default-constructible (the pool does `new T()`).

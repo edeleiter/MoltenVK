@@ -83,6 +83,14 @@ VkResult MVKCmdBuildAccelerationStructures::setContent(
 void MVKCmdBuildAccelerationStructures::encode(MVKCommandEncoder* cmdEncoder) {
 	MVKDevice* dev = cmdEncoder->getDevice();
 	for (auto& b : _builds) {
+		// The fork always does a full BUILD (no refit). Silently running an UPDATE as a full build would overflow
+		// an update-sized scratch (updateScratchSize < buildScratchSize) → GPU fault; fail loud instead. The engine
+		// only issues MODE_BUILD (see RtAccelCache); this guards a future/foreign UPDATE.
+		if (b.mode != VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR) {
+			MVKLogError("vkCmdBuildAccelerationStructuresKHR: build mode %d (refit/UPDATE) is unsupported by the VulkanEd "
+						"fork — only VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR; skipping this build.", (int)b.mode);
+			continue;
+		}
 		if      (b.type == VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR) { encodeBLAS(cmdEncoder, dev, b); }
 		else if (b.type == VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR)    { encodeTLAS(cmdEncoder, dev, b); }
 	}
@@ -153,9 +161,13 @@ void MVKCmdBuildAccelerationStructures::encodeTLAS(MVKCommandEncoder* cmdEncoder
 
 	for (uint32_t i = 0; i < instanceCount; i++) {
 		const VkAccelerationStructureInstanceKHR& vi = vkInsts[i];
+		// Pointer-as-token: accelerationStructureReference IS the MVKAccelerationStructure* (see
+		// vkGetAccelerationStructureDeviceAddressKHR). TRUSTED INPUT — a garbage/stale value is a wild deref; the
+		// getVkObjectType() check below catches type-confusion but not use-after-free (a real address→AS registry
+		// would; deferred). The engine only writes live BLAS handles.
 		auto* blas = (MVKAccelerationStructure*)vi.accelerationStructureReference;
-		if ( !blas || !blas->getMTLAccelerationStructure() ) {
-			MVKLogError("vkCmdBuildAccelerationStructuresKHR: TLAS instance %u references a null BLAS — TLAS build skipped.", i);
+		if ( !blas || blas->getVkObjectType() != VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR || !blas->getMTLAccelerationStructure() ) {
+			MVKLogError("vkCmdBuildAccelerationStructuresKHR: TLAS instance %u has an invalid/unbuilt BLAS reference — TLAS build skipped.", i);
 			return;
 		}
 

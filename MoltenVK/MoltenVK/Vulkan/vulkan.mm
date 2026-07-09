@@ -3170,12 +3170,12 @@ MVK_PUBLIC_VULKAN_CORE_ALIAS(vkBindImageMemory2, KHR);
 #pragma mark -
 #pragma mark VK_KHR_acceleration_structure extension
 
-// M1: the extension is ADVERTISED but acceleration structures are not yet backed by Metal. These entry points
-// are deliberately BENIGN (NOT the assert(false) MVK_PUBLIC_VULKAN_STUB macros): create returns a unique
-// non-null handle, BuildSizes reports non-zero 256-aligned sizes, GetDeviceAddress a non-zero address, and the
-// build/copy commands are no-ops. The engine therefore selects the hardware RayQuery backend, allocates its AS
-// scratch/store, records a build that does nothing, and the shader traverses a garbage TLAS — the intended
-// first-frame VK_ERROR_DEVICE_LOST. M2 replaces these with real MTLAccelerationStructure plumbing.
+// VK_KHR_acceleration_structure — fully backed by Metal in the VulkanEd ray-query fork. vkCreate allocates a
+// real MTLAccelerationStructure (made resident on the residency set); BuildSizes queries Metal's real AS/scratch
+// sizes; GetDeviceAddress returns the MVKAccelerationStructure* as a pointer-as-token (round-tripped verbatim by
+// the engine into instance accelerationStructureReference); and vkCmdBuildAccelerationStructuresKHR records a real
+// deferred MVKCmdBuildAccelerationStructures that encodes both BLAS (non-indexed R32G32B32_SFLOAT position soup)
+// and TLAS (host-read instance buffer → resolve each reference → MTLInstanceAccelerationStructure) builds.
 
 MVK_PUBLIC_VULKAN_SYMBOL VkResult vkCreateAccelerationStructureKHR(
     VkDevice device,
@@ -3189,6 +3189,11 @@ MVK_PUBLIC_VULKAN_SYMBOL VkResult vkCreateAccelerationStructureKHR(
     MVKDevice* mvkDev = MVKDevice::getMVKDevice(device);
     MVKAccelerationStructure* mvkAS = mvkDev->createAccelerationStructure(pCreateInfo, pAllocator);
     id<MTLAccelerationStructure> mtlAS = [mvkDev->getPhysicalDevice()->getMTLDevice() newAccelerationStructureWithSize: pCreateInfo->size];
+    if ( !mtlAS ) {   // size 0 / out of device memory — don't hand back a "successful" AS whose builds all skip
+        mvkDev->destroyAccelerationStructure(mvkAS, pAllocator);
+        *pAccelerationStructure = VK_NULL_HANDLE;
+        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    }
     mvkAS->setMTLAccelerationStructure(mtlAS);   // retains
     mvkDev->makeResident(mtlAS);                 // residency set (M5): the ray-query dispatch reads the AS directly
     [mtlAS release];                             // balance the +1 from newAccelerationStructureWithSize:
@@ -3238,8 +3243,9 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdBuildAccelerationStructuresKHR(
     const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
     const VkAccelerationStructureBuildRangeInfoKHR* const* ppBuildRangeInfos) {
 
-    // BLAS builds are real (MTLPrimitiveAccelerationStructure); TLAS builds are captured but skipped at encode
-    // (the host-side TLAS + address↔handle shim are a later milestone).
+    // Records a deferred MVKCmdBuildAccelerationStructures; at encode it builds both BLAS
+    // (MTLPrimitiveAccelerationStructure) and TLAS (MTLInstanceAccelerationStructure, instances host-read from
+    // the engine's instance buffer and resolved via the pointer-as-token shim).
     MVKAddCmd(BuildAccelerationStructures, commandBuffer, infoCount, pInfos, ppBuildRangeInfos);
 }
 

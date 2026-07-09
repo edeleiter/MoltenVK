@@ -948,6 +948,9 @@ template <> struct MVKArgBufEncoder<MVKArgumentBufferMode::ArgEncoder> {
 	void* constantData(uint32_t index) { return [enc constantDataAtIndex:base + index]; }
 	void setTexture(id<MTLTexture> tex,       size_t index = 0) { [enc setTexture:tex atIndex:base + index]; }
 	void setSampler(id<MTLSamplerState> samp, size_t index = 0) { [enc setSamplerState:samp atIndex:base + index]; }
+	// NOTE: the AS descriptor bind is validated only on the Metal3 arg-buffer path (the M5 / Apple-Silicon target).
+	// This ArgEncoder fallback's slot is declared from the reused Texture GPU layout (i.e. MTLDataTypeTexture), which
+	// does not match an acceleration structure — writing an AS here is untested and likely wrong on that path.
 	void setAccelerationStructure(id<MTLAccelerationStructure> as, size_t index = 0) { [enc setAccelerationStructure:as atIndex:base + index]; }
 	void setBuffer(id<MTLBuffer> buf, uint64_t offset, size_t index = 0) {
 		[enc setBuffer:buf offset:static_cast<NSUInteger>(offset) atIndex:base + index];

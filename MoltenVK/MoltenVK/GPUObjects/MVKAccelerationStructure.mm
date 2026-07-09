@@ -35,8 +35,13 @@ void MVKAccelerationStructure::destroy() {
 
 // Potentially called from destroy() (and safe to call more than once), so null everything out.
 void MVKAccelerationStructure::detachMetal() {
-	[_mtlAccelStruct release];
-	_mtlAccelStruct = nil;
+	if (_mtlAccelStruct) {
+		// Paired with the makeResident() at create (vkCreateAccelerationStructureKHR) — the residency set
+		// retains the allocation, so without this the AS never deallocates and the set grows unbounded.
+		getDevice()->removeResidency(_mtlAccelStruct);
+		[_mtlAccelStruct release];
+		_mtlAccelStruct = nil;
+	}
 	_referencedBLAS.clear();
 }
 
@@ -59,6 +64,19 @@ MTLAccelerationStructureDescriptor* MVKAccelerationStructure::getMTLDescriptor(
 																			  : *pBuildInfo->ppGeometries[i];
 		if (g.geometryType != VK_GEOMETRY_TYPE_TRIANGLES_KHR) { continue; }
 		const VkAccelerationStructureGeometryTrianglesDataKHR& tri = g.geometry.triangles;
+
+		// The fork only handles non-indexed VK_FORMAT_R32G32B32_SFLOAT position geometry (what the engine emits;
+		// see RtAccelCache). vertexFormat is hardcoded below and indexData is not wired — so fail LOUD on anything
+		// else rather than silently building a geometrically-wrong BLAS. (Same call path as BuildSizes, so the
+		// skip is consistent between sizing and building.)
+		if (tri.vertexFormat != VK_FORMAT_R32G32B32_SFLOAT || tri.indexType != VK_INDEX_TYPE_NONE_KHR) {
+			// static method → use the object-less reportMessage (MVKLogError needs `this`).
+			MVKBaseObject::reportMessage(nullptr, MVK_CONFIG_LOG_LEVEL_ERROR,
+				"vkCmdBuildAccelerationStructuresKHR: BLAS geometry %u has vertexFormat=%d indexType=%d — the VulkanEd "
+				"fork supports only non-indexed VK_FORMAT_R32G32B32_SFLOAT; skipping this geometry.",
+				i, (int)tri.vertexFormat, (int)tri.indexType);
+			continue;
+		}
 
 		auto* triDesc = [MTLAccelerationStructureTriangleGeometryDescriptor descriptor];
 		triDesc.triangleCount = pPrimitiveCounts ? pPrimitiveCounts[i] : 0;
