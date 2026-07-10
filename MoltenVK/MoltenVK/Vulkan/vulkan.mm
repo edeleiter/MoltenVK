@@ -3196,6 +3196,7 @@ MVK_PUBLIC_VULKAN_SYMBOL VkResult vkCreateAccelerationStructureKHR(
     }
     mvkAS->setMTLAccelerationStructure(mtlAS);   // retains
     mvkDev->makeResident(mtlAS);                 // residency set (M5): the ray-query dispatch reads the AS directly
+    mvkDev->addAccelerationStructure(mvkAS);     // per-dispatch useResource residency (BLAS traversal needs this)
     [mtlAS release];                             // balance the +1 from newAccelerationStructureWithSize:
     *pAccelerationStructure = (VkAccelerationStructureKHR)mvkAS;
     return VK_SUCCESS;

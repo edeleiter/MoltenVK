@@ -659,6 +659,11 @@ static void bindMetalResources(id<MTLCommandEncoder> encoder,
 		mvkEncoder.getDevice()->encodeGPUAddressableBuffers(mtlShared._useResource, useResourceStage);
 	}
 
+	// Ray-query AS residency: the device residency set makes each AS resident, but Metal does NOT keep a TLAS's
+	// indirectly-referenced BLAS resident during a compute traversal from the set alone — so useResource the whole
+	// live-AS set (BLAS + TLAS) per dispatch. No-op (empty list) for a non-RT app; deduped by the useResource helper.
+	mvkEncoder.getDevice()->encodeAccelerationStructureResidency(mtlShared._useResource, useResourceStage);
+
 	const MVKShaderStageResourceBinding& resourceCounts = common._layout->getResourceCounts().stages[vkStage];
 	for (MVKImplicitBuffer buffer : resources.implicitBuffers.needed & MVKNonVolatileImplicitBuffers) {
 		assert(buffer < static_cast<MVKImplicitBuffer>(MVKNonVolatileImplicitBuffer::Count));

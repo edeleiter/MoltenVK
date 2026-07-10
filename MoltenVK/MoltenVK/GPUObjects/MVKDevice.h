@@ -876,6 +876,16 @@ public:
 	/** Tell the GPU to be ready to use any of the GPU-addressable buffers. */
 	void encodeGPUAddressableBuffers(MVKUseResourceHelper& resources, MVKResourceUsageStages stage);
 
+	/** Track/untrack a live acceleration structure for per-dispatch residency (see encodeAccelerationStructureResidency). */
+	void addAccelerationStructure(MVKAccelerationStructure* accelStruct);
+	void removeAccelerationStructure(MVKAccelerationStructure* accelStruct);
+
+	/** Make every live acceleration structure resident for a ray-query compute dispatch. The device residency set makes
+	    an AS resident, but Metal does NOT keep a TLAS's indirectly-referenced BLAS resident during a compute traversal
+	    from the set alone — so the AS chain must be useResource'd per dispatch (mirrors encodeGPUAddressableBuffers).
+	    Empty for a non-RT app → zero cost. */
+	void encodeAccelerationStructureResidency(MVKUseResourceHelper& resources, MVKResourceUsageStages stage);
+
 	/**
 	 * Resolves a buffer device address (as handed out by VK_KHR_buffer_device_address) back to the
 	 * MTLBuffer that contains it, setting *pOffset to the byte offset of the address within that MTLBuffer.
@@ -1113,6 +1123,7 @@ protected:
 	MVKSmallVector<MVKSmallVector<MVKQueue*, kMVKQueueCountPerQueueFamily>, kMVKQueueFamilyCount> _queuesByQueueFamilyIndex;
 	MVKSmallVector<MVKResource*> _resources;
 	MVKSmallVector<MVKBuffer*> _gpuAddressableBuffers;
+	MVKSmallVector<MVKAccelerationStructure*> _residentAccelStructs;
 	MVKSmallVector<MVKPrivateDataSlot*> _privateDataSlots;
 	MVKSmallVector<bool> _privateDataSlotsAvailability;
 	MVKSmallVector<MVKSemaphoreImpl*> _awaitingSemaphores;

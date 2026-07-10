@@ -4644,6 +4644,31 @@ void MVKDevice::encodeGPUAddressableBuffers(MVKUseResourceHelper& resources, MVK
 	}
 }
 
+// AS residency for ray-query dispatches — mirrors the GPU-addressable-buffer path above. Tracked at AS create/destroy
+// (vkCreateAccelerationStructureKHR / detachMetal), useResource'd per compute dispatch (see the call site in
+// MVKCommandEncoderState). The device residency set alone does not keep a TLAS's indirectly-referenced BLAS resident
+// during a traversal, so the whole live-AS set (BLAS + TLAS) is made resident per dispatch.
+void MVKDevice::addAccelerationStructure(MVKAccelerationStructure* accelStruct) {
+	if ( !accelStruct ) { return; }
+	lock_guard<mutex> lock(_rezLock);
+	_residentAccelStructs.push_back(accelStruct);
+}
+
+void MVKDevice::removeAccelerationStructure(MVKAccelerationStructure* accelStruct) {
+	if ( !accelStruct ) { return; }
+	lock_guard<mutex> lock(_rezLock);
+	mvkRemoveFirstOccurance(_residentAccelStructs, accelStruct);
+}
+
+void MVKDevice::encodeAccelerationStructureResidency(MVKUseResourceHelper& resources, MVKResourceUsageStages stage) {
+	lock_guard<mutex> lock(_rezLock);
+	for (auto& as : _residentAccelStructs) {
+		if (id<MTLAccelerationStructure> mtlAS = as->getMTLAccelerationStructure()) {
+			resources.add(mtlAS, stage, false);   // read-only during traversal
+		}
+	}
+}
+
 id<MTLBuffer> MVKDevice::getMTLBufferForDeviceAddress(VkDeviceAddress addr, NSUInteger* pOffset) {
 	lock_guard<mutex> lock(_rezLock);
 	// Linear scan of the (small) GPU-addressable buffer set — the same set encodeGPUAddressableBuffers uses.
