@@ -72,10 +72,19 @@ MTLAccelerationStructureDescriptor* MVKAccelerationStructure::getMTLDescriptor(
 	const VkAccelerationStructureBuildGeometryInfoKHR* pBuildInfo,
 	const uint32_t* pPrimitiveCounts) {
 
+	// AllowUpdate → the built AS must carry MTLAccelerationStructureUsageRefit so a later refitAccelerationStructure:
+	// (MODE_UPDATE) is legal AND so accelerationStructureSizesWithDescriptor: reports a real refitScratchBufferSize.
+	// getMTLDescriptor is shared by BuildSizes + the initial MODE_BUILD, so both stamp the same usage from the flags.
+	MTLAccelerationStructureUsage mtlUsage = MTLAccelerationStructureUsageNone;
+	if (pBuildInfo->flags & VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR) {
+		mtlUsage |= MTLAccelerationStructureUsageRefit;
+	}
+
 	if (pBuildInfo->type == VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR) {
 		// TLAS: sized by instance count. The actual instance array is materialized at build time (the shim).
 		auto* instDesc = [MTLInstanceAccelerationStructureDescriptor descriptor];
 		instDesc.instanceCount = pPrimitiveCounts ? pPrimitiveCounts[0] : 0;
+		instDesc.usage = mtlUsage;
 		return instDesc;
 	}
 
@@ -137,5 +146,6 @@ MTLAccelerationStructureDescriptor* MVKAccelerationStructure::getMTLDescriptor(
 	}
 	auto* primDesc = [MTLPrimitiveAccelerationStructureDescriptor descriptor];
 	primDesc.geometryDescriptors = geoms;
+	primDesc.usage = mtlUsage;   // Refit when ALLOW_UPDATE (see above) — makes MODE_UPDATE refit legal
 	return primDesc;
 }

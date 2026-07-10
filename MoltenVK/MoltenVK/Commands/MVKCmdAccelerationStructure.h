@@ -57,8 +57,10 @@ protected:
 	// slices this build's range.
 	struct MVKASBuild {
 		MVKAccelerationStructure* dst;
+		MVKAccelerationStructure* src;   // MODE_UPDATE (refit) source; == dst for in-place. null for MODE_BUILD.
 		VkAccelerationStructureTypeKHR type;
 		VkBuildAccelerationStructureModeKHR mode;
+		VkBuildAccelerationStructureFlagsKHR flags;   // AllowUpdate → the built AS gets MTLAccelerationStructureUsageRefit
 		VkDeviceAddress scratchAddress;
 		uint32_t geometryCount;
 		uint32_t firstGeometryIndex;

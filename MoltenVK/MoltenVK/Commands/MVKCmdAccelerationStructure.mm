@@ -59,8 +59,10 @@ VkResult MVKCmdBuildAccelerationStructures::setContent(
 
 		MVKASBuild b = {};
 		b.dst               = (MVKAccelerationStructure*)info.dstAccelerationStructure;
+		b.src               = (MVKAccelerationStructure*)info.srcAccelerationStructure;   // refit source (MODE_UPDATE)
 		b.type              = info.type;
 		b.mode              = info.mode;
+		b.flags             = info.flags;   // AllowUpdate → refit-capable descriptor (see getMTLDescriptor)
 		b.scratchAddress    = info.scratchData.deviceAddress;
 		b.firstGeometryIndex = (uint32_t)_geometries.size();
 		b.geometryCount     = info.geometryCount;
@@ -83,12 +85,12 @@ VkResult MVKCmdBuildAccelerationStructures::setContent(
 void MVKCmdBuildAccelerationStructures::encode(MVKCommandEncoder* cmdEncoder) {
 	MVKDevice* dev = cmdEncoder->getDevice();
 	for (auto& b : _builds) {
-		// The fork always does a full BUILD (no refit). Silently running an UPDATE as a full build would overflow
-		// an update-sized scratch (updateScratchSize < buildScratchSize) → GPU fault; fail loud instead. The engine
-		// only issues MODE_BUILD (see RtAccelCache); this guards a future/foreign UPDATE.
-		if (b.mode != VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR) {
-			MVKLogError("vkCmdBuildAccelerationStructuresKHR: build mode %d (refit/UPDATE) is unsupported by the VulkanEd "
-						"fork — only VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR; skipping this build.", (int)b.mode);
+		// MODE_BUILD (static + the periodic animated rebuild) and MODE_UPDATE (in-place BLAS refit of skinned
+		// positions) are both supported — encodeBLAS branches on the mode. TLAS always full-builds (the engine never
+		// updates it). Any other mode is unknown → fail loud rather than mis-encode.
+		if (b.mode != VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR &&
+			b.mode != VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR) {
+			MVKLogError("vkCmdBuildAccelerationStructuresKHR: unknown build mode %d — skipping this build.", (int)b.mode);
 			continue;
 		}
 		if      (b.type == VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR) { encodeBLAS(cmdEncoder, dev, b); }
@@ -105,6 +107,8 @@ void MVKCmdBuildAccelerationStructures::encodeBLAS(MVKCommandEncoder* cmdEncoder
 	VkAccelerationStructureBuildGeometryInfoKHR info = {};
 	info.sType         = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
 	info.type          = b.type;
+	info.flags         = b.flags;   // LOAD-BEARING: AllowUpdate here → getMTLDescriptor stamps the Refit usage on the
+	                                // INITIAL build, without which a later refitAccelerationStructure: is invalid.
 	info.geometryCount = b.geometryCount;
 	info.pGeometries   = &_geometries[b.firstGeometryIndex];
 
@@ -121,6 +125,25 @@ void MVKCmdBuildAccelerationStructures::encodeBLAS(MVKCommandEncoder* cmdEncoder
 
 	id<MTLAccelerationStructureCommandEncoder> enc =
 		cmdEncoder->getMTLAccelerationStructureEncoder(kMVKCommandUseBuildAccelerationStructure);
+
+	if (b.mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR) {
+		// In-place BLAS refit: re-shape the existing AS to the new (skinned) vertex positions instead of a full
+		// rebuild. Metal allows source == destination. The source AS must have been built with the Refit usage (see
+		// info.flags above). The engine sets src == dst (RtAccelCache); a null/unbuilt src is a caller bug → fail loud.
+		id<MTLAccelerationStructure> srcAS = b.src ? b.src->getMTLAccelerationStructure() : nil;
+		if ( !srcAS ) {
+			MVKLogError("vkCmdBuildAccelerationStructuresKHR: MODE_UPDATE with no source acceleration structure — refit skipped.");
+			return;
+		}
+		[enc refitAccelerationStructure: srcAS
+							 descriptor: desc
+							destination: b.dst->getMTLAccelerationStructure()
+						  scratchBuffer: scratch
+					scratchBufferOffset: scratchOffset];
+		MVKLogInfo("[VulkanEd fork] encoded BLAS refit (%u geometr%s).", b.geometryCount, b.geometryCount == 1 ? "y" : "ies");
+		return;
+	}
+
 	[enc buildAccelerationStructure: b.dst->getMTLAccelerationStructure()
 						 descriptor: desc
 					  scratchBuffer: scratch
